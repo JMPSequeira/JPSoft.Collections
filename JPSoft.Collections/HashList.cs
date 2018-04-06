@@ -407,9 +407,4 @@ namespace JPSoft.Collections.Generics
 			_items = newItems;
 		}
 	}
-
-	public class DuplicateEntryException : ArgumentException
-	{
-		public DuplicateEntryException(string message, string paramName) : base(message, paramName) { }
-	}
 }
