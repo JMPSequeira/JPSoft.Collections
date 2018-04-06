@@ -147,7 +147,7 @@ namespace JPSoft.Collections.Generics
 
 
 				if (FindEntry(item) > -1)
-					throw new DuplicateEntryException("Coolections contains items that already exist.", nameof(items));
+					throw new DuplicateEntryException("Collection contains at least one item that already exist.", nameof(items));
 			}
 
 
