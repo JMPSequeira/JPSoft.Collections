@@ -5,6 +5,10 @@ using System.Linq;
 
 namespace JPSoft.Collections.Generics
 {
+	/// <summary>
+	/// A collection accepting no nulls or duplicates.
+	/// </summary>
+	/// <typeparam name="T"></typeparam>
 	public class HashList<T> : IList<T> where T : IEquatable<T>
 	{
 		struct Entry
