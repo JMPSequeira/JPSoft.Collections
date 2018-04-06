@@ -52,22 +52,6 @@ namespace JPSoft.Collections.Generics
 			Init(capacity);
 		}
 
-		void Init(int capacity)
-		{
-			_length = capacity;
-
-			_freeEntry = -1;
-
-			_entries = new Entry[_length];
-
-			_buckets = new int[_length];
-
-			for (var i = 0; i < _length; i++)
-				_buckets[i] = -1;
-
-			_items = new T[_length];
-		}
-
 		public bool IsReadOnly => false;
 
 		public int Count => _count;
@@ -307,6 +291,22 @@ namespace JPSoft.Collections.Generics
 				Array.Copy(_items, index, _items, index + 1, _count - index);
 
 			_items[index] = item;
+		}
+
+		void Init(int capacity)
+		{
+			_length = capacity;
+
+			_freeEntry = -1;
+
+			_entries = new Entry[_length];
+
+			_buckets = new int[_length];
+
+			for (var i = 0; i < _length; i++)
+				_buckets[i] = -1;
+
+			_items = new T[_length];
 		}
 
 		int NextPowerOfTwo(int value)
