@@ -9,40 +9,43 @@ namespace JPSoft.Collections.Tests
 	public class HashListTests
 	{
 
-		public class Dummy : IComparable<Dummy>
+		public class Dummy : IComparable<Dummy>, IEquatable<Dummy>
 		{
 			static int count = 0;
+
 			readonly int index = count++;
 
 			public int CompareTo(Dummy other)
 			{
 				return index.CompareTo(other.index);
 			}
+
+			public bool Equals(Dummy other) => index == other.index;
 		}
 
-		HashList<Dummy> dic;
+		HashList<Dummy> hashList;
 
 		[SetUp]
 		public void Setup()
 		{
-			dic = new HashList<Dummy>();
+			hashList = new HashList<Dummy>();
 		}
 
 		[Test]
 		public void Add_Valid_Adds()
 		{
-			dic.Add(new Dummy());
+			hashList.Add(new Dummy());
 
-			Assert.IsNotEmpty(dic);
+			Assert.IsNotEmpty(hashList);
 		}
 
 		[Test]
 		public void Add_Valid_CountReflectsAdded()
 		{
-			dic.Add(new Dummy());
-			dic.Add(new Dummy());
+			hashList.Add(new Dummy());
+			hashList.Add(new Dummy());
 
-			Assert.AreEqual(2, dic.Count);
+			Assert.AreEqual(2, hashList.Count);
 		}
 
 		[Test]
@@ -50,16 +53,16 @@ namespace JPSoft.Collections.Tests
 		{
 			var same = new Dummy();
 
-			dic.Add(same);
+			hashList.Add(same);
 
-			Assert.Throws<ArgumentException>(() => dic.Add(same));
+			Assert.Throws<DuplicateEntryException>(() => hashList.Add(same));
 		}
 
 		[Test]
 		public void Add_Null_ThrowsArgumentNullException()
 		{
 			Dummy invalid = null;
-			Assert.Throws<ArgumentNullException>(() => dic.Add(invalid));
+			Assert.Throws<ArgumentNullException>(() => hashList.Add(invalid));
 		}
 
 		[Test]
@@ -71,9 +74,9 @@ namespace JPSoft.Collections.Tests
 				new Dummy()
 			};
 
-			dic.AddRange(items);
+			hashList.AddRange(items);
 
-			Assert.IsNotEmpty(dic);
+			Assert.IsNotEmpty(hashList);
 		}
 
 		[Test]
@@ -85,11 +88,11 @@ namespace JPSoft.Collections.Tests
 				new Dummy()
 			};
 
-			dic.Add(new Dummy());
+			hashList.Add(new Dummy());
 
-			dic.AddRange(items);
+			hashList.AddRange(items);
 
-			Assert.IsTrue(dic.Skip(1).SequenceEqual(items));
+			Assert.IsTrue(hashList.Skip(1).SequenceEqual(items));
 		}
 
 		[Test]
@@ -102,14 +105,15 @@ namespace JPSoft.Collections.Tests
 				null
 			};
 
-			Assert.Throws<ArgumentNullException>(() => dic.AddRange(items));
+			Assert.Throws<ArgumentNullException>(() => hashList.AddRange(items));
 		}
 
 		[Test]
 		public void AddRange_CollectionWithExisting_ThrowsArgumentException()
 		{
 			var same = new Dummy();
-			dic.Add(same);
+
+			hashList.Add(same);
 
 			var items = new List<Dummy>
 			{
@@ -118,7 +122,7 @@ namespace JPSoft.Collections.Tests
 				same
 			};
 
-			Assert.Throws<ArgumentException>(() => dic.AddRange(items));
+			Assert.Throws<DuplicateEntryException>(() => hashList.AddRange(items));
 		}
 
 		[Test]
@@ -130,9 +134,9 @@ namespace JPSoft.Collections.Tests
 				new Dummy(),
 			};
 
-			dic.AddRange(items);
+			hashList.AddRange(items);
 
-			Assert.AreEqual(2, dic.Count);
+			Assert.AreEqual(2, hashList.Count);
 		}
 
 		[Test]
@@ -140,17 +144,17 @@ namespace JPSoft.Collections.Tests
 		{
 			var dummyAtOne = new Dummy();
 
-			dic.AddRange(new Dummy[] { dummyAtOne, new Dummy(), new Dummy() });
+			hashList.AddRange(new Dummy[] { dummyAtOne, new Dummy(), new Dummy() });
 
-			Assert.AreEqual(0, dic.IndexOf(dummyAtOne));
+			Assert.AreEqual(0, hashList.IndexOf(dummyAtOne));
 		}
 
 		[Test]
 		public void IndexOf_NonExisting_CorrectIndex()
 		{
-			dic.AddRange(new Dummy[] { new Dummy(), new Dummy() });
+			hashList.AddRange(new Dummy[] { new Dummy(), new Dummy() });
 
-			Assert.AreEqual(-1, dic.IndexOf(new Dummy()));
+			Assert.AreEqual(-1, hashList.IndexOf(new Dummy()));
 		}
 
 		[Test]
@@ -159,24 +163,24 @@ namespace JPSoft.Collections.Tests
 		[TestCase(2)]
 		public void Insert_ValidIndex_Inserts(int validIndex)
 		{
-			dic.AddRange(new Dummy[] { new Dummy(), new Dummy(), new Dummy() });
+			hashList.AddRange(new Dummy[] { new Dummy(), new Dummy(), new Dummy() });
 
 			var dummy = new Dummy();
 
-			dic.Insert(validIndex, dummy);
+			hashList.Insert(validIndex, dummy);
 
-			Assert.AreEqual(dummy, dic[validIndex]);
+			Assert.AreEqual(dummy, hashList[validIndex]);
 		}
 
 		public void Insert_ValidIndex_CountReflectsInserted(int validIndex)
 		{
-			dic.AddRange(new Dummy[] { new Dummy(), new Dummy(), new Dummy() });
+			hashList.AddRange(new Dummy[] { new Dummy(), new Dummy(), new Dummy() });
 
 			var dummy = new Dummy();
 
-			dic.Insert(validIndex, dummy);
+			hashList.Insert(validIndex, dummy);
 
-			Assert.AreEqual(4, dic.Count);
+			Assert.AreEqual(4, hashList.Count);
 		}
 
 		[Test]
@@ -185,7 +189,7 @@ namespace JPSoft.Collections.Tests
 		public void Insert_InvalidIndex_ThrowsArgumentOutOfRange(int invalidIndex)
 		{
 			Assert.Throws<ArgumentOutOfRangeException>(() =>
-				dic.Insert(invalidIndex, new Dummy()));
+				hashList.Insert(invalidIndex, new Dummy()));
 		}
 
 		[Test]
@@ -193,19 +197,19 @@ namespace JPSoft.Collections.Tests
 		{
 			var dummy = new Dummy();
 
-			dic.Add(dummy);
+			hashList.Add(dummy);
 
-			Assert.Throws<ArgumentException>(() =>
-				dic.Insert(0, dummy));
+			Assert.Throws<DuplicateEntryException>(() =>
+				hashList.Insert(0, dummy));
 		}
 
 		[Test]
 		public void Insert_Valid_CountReflectsAdded()
 		{
-			dic.Add(new Dummy());
-			dic.Insert(0, new Dummy());
+			hashList.Add(new Dummy());
+			hashList.Insert(0, new Dummy());
 
-			Assert.AreEqual(2, dic.Count);
+			Assert.AreEqual(2, hashList.Count);
 		}
 
 		[Test]
@@ -213,10 +217,10 @@ namespace JPSoft.Collections.Tests
 		{
 			var dummy = new Dummy();
 
-			dic.Add(dummy);
+			hashList.Add(dummy);
 
 			Assert.Throws<ArgumentNullException>(() =>
-				dic.Insert(0, null));
+				hashList.Insert(0, null));
 		}
 
 		[Test]
@@ -234,17 +238,17 @@ namespace JPSoft.Collections.Tests
 				new Dummy()
 			};
 
-			dic.AddRange(new Dummy[] { new Dummy(), new Dummy(), new Dummy() });
+			hashList.AddRange(new Dummy[] { new Dummy(), new Dummy(), new Dummy() });
 
-			dic.InsertRange(index, items);
+			hashList.InsertRange(index, items);
 
-			Assert.AreEqual(first, dic[index]);
+			Assert.AreEqual(first, hashList[index]);
 		}
 
 		[Test]
 		public void InsertRange_CollectionWithNull_ThrowsArgumentNullException()
 		{
-			dic.Add(new Dummy());
+			hashList.Add(new Dummy());
 
 			var items = new List<Dummy>
 			{
@@ -253,14 +257,14 @@ namespace JPSoft.Collections.Tests
 				null
 			};
 
-			Assert.Throws<ArgumentNullException>(() => dic.InsertRange(0, items));
+			Assert.Throws<ArgumentNullException>(() => hashList.InsertRange(0, items));
 		}
 
 		[Test]
 		public void InsertRange_CollectionWithExisting_ThrowsArgumentException()
 		{
 			var same = new Dummy();
-			dic.Add(same);
+			hashList.Add(same);
 
 			var items = new List<Dummy>
 			{
@@ -269,7 +273,7 @@ namespace JPSoft.Collections.Tests
 				same
 			};
 
-			Assert.Throws<ArgumentException>(() => dic.InsertRange(0, items));
+			Assert.Throws<DuplicateEntryException>(() => hashList.InsertRange(0, items));
 		}
 
 		[Test]
@@ -278,13 +282,13 @@ namespace JPSoft.Collections.Tests
 		public void InsertRange_InvalidIndex_ThrowsArgumentOutOfRange(int invalidIndex)
 		{
 			Assert.Throws<ArgumentOutOfRangeException>(() =>
-				dic.InsertRange(invalidIndex, new Dummy[] { new Dummy(), new Dummy() }));
+				hashList.InsertRange(invalidIndex, new Dummy[] { new Dummy(), new Dummy() }));
 		}
 
 		[Test]
 		public void InsertRange_ValidCollection_CountReflectsAdded()
 		{
-			dic.Add(new Dummy());
+			hashList.Add(new Dummy());
 
 			var items = new List<Dummy>
 			{
@@ -292,9 +296,9 @@ namespace JPSoft.Collections.Tests
 				new Dummy()
 			};
 
-			dic.InsertRange(0, items);
+			hashList.InsertRange(0, items);
 
-			Assert.AreEqual(3, dic.Count);
+			Assert.AreEqual(3, hashList.Count);
 		}
 
 		[Test]
@@ -302,11 +306,11 @@ namespace JPSoft.Collections.Tests
 		{
 			var existing = new Dummy();
 
-			dic.Add(existing);
+			hashList.Add(existing);
 
-			dic.Remove(existing);
+			hashList.Remove(existing);
 
-			Assert.IsEmpty(dic);
+			Assert.IsEmpty(hashList);
 		}
 
 		[Test]
@@ -314,9 +318,9 @@ namespace JPSoft.Collections.Tests
 		{
 			var existing = new Dummy();
 
-			dic.Add(existing);
+			hashList.Add(existing);
 
-			Assert.IsTrue(dic.Remove(existing));
+			Assert.IsTrue(hashList.Remove(existing));
 		}
 
 		[Test]
@@ -324,19 +328,19 @@ namespace JPSoft.Collections.Tests
 		{
 			var existing = new Dummy();
 
-			dic.Add(existing);
+			hashList.Add(existing);
 
-			dic.Add(new Dummy());
+			hashList.Add(new Dummy());
 
-			dic.Remove(existing);
+			hashList.Remove(existing);
 
-			Assert.AreEqual(1, dic.Count);
+			Assert.AreEqual(1, hashList.Count);
 		}
 
 		[Test]
 		public void Remove_Existing_False()
 		{
-			Assert.IsFalse(dic.Remove(new Dummy()));
+			Assert.IsFalse(hashList.Remove(new Dummy()));
 		}
 
 		[Test]
@@ -356,11 +360,11 @@ namespace JPSoft.Collections.Tests
 
 			var expected = items.ElementAt(index);
 
-			dic.AddRange(items);
+			hashList.AddRange(items);
 
-			dic.RemoveAt(index);
+			hashList.RemoveAt(index);
 
-			Assert.AreNotEqual(expected, dic[index]);
+			Assert.AreNotEqual(expected, hashList[index]);
 		}
 
 		[Test]
@@ -374,11 +378,11 @@ namespace JPSoft.Collections.Tests
 				new Dummy(),
 			};
 
-			dic.AddRange(items);
+			hashList.AddRange(items);
 
-			dic.RemoveAt(1);
+			hashList.RemoveAt(1);
 
-			Assert.AreEqual(3, dic.Count);
+			Assert.AreEqual(3, hashList.Count);
 		}
 
 		[Test]
@@ -394,15 +398,15 @@ namespace JPSoft.Collections.Tests
 				new Dummy(),
 			};
 
-			dic.AddRange(items);
+			hashList.AddRange(items);
 
-			Assert.Throws<ArgumentOutOfRangeException>(() => dic.RemoveAt(index));
+			Assert.Throws<ArgumentOutOfRangeException>(() => hashList.RemoveAt(index));
 		}
 
 		[Test]
 		public void RemoveRange_Valid_CountReflects()
 		{
-			dic.Add(new Dummy());
+			hashList.Add(new Dummy());
 
 			var items = new List<Dummy>
 			{
@@ -410,11 +414,11 @@ namespace JPSoft.Collections.Tests
 				new Dummy()
 			};
 
-			dic.AddRange(items);
+			hashList.AddRange(items);
 
-			dic.RemoveRange(0, 2);
+			hashList.RemoveRange(0, 2);
 
-			Assert.AreEqual(1, dic.Count);
+			Assert.AreEqual(1, hashList.Count);
 		}
 
 		[Test]
@@ -426,11 +430,11 @@ namespace JPSoft.Collections.Tests
 				new Dummy()
 			};
 
-			dic.AddRange(items);
+			hashList.AddRange(items);
 
-			dic.RemoveRange(0, 2);
+			hashList.RemoveRange(0, 2);
 
-			Assert.IsEmpty(dic);
+			Assert.IsEmpty(hashList);
 		}
 
 		[Test]
@@ -448,17 +452,17 @@ namespace JPSoft.Collections.Tests
 				new Dummy()
 			};
 
-			dic.AddRange(items);
+			hashList.AddRange(items);
 			items.RemoveRange(index, count);
-			dic.RemoveRange(index, count);
+			hashList.RemoveRange(index, count);
 
-			Assert.IsTrue(items.SequenceEqual(dic));
+			Assert.IsTrue(items.SequenceEqual(hashList));
 		}
 
 		[Test]
-		[TestCase(-1)]
-		[TestCase(5)]
-		public void RemoveRange_InvalidIndex_ThrowsArgumentOutOfRangeException(int index)
+		[TestCase(-1, 1)]
+		[TestCase(1, -1)]
+		public void RemoveRange_NegativeIndex_ThrowsArgumentOutOfRangeException(int index, int count)
 		{
 
 			var items = new List<Dummy>
@@ -467,9 +471,9 @@ namespace JPSoft.Collections.Tests
 				new Dummy()
 			};
 
-			dic.AddRange(items);
+			hashList.AddRange(items);
 
-			Assert.Throws<ArgumentOutOfRangeException>(() => dic.RemoveRange(index, 1));
+			Assert.Throws<ArgumentOutOfRangeException>(() => hashList.RemoveRange(index, count));
 		}
 
 		[Test]
@@ -483,9 +487,9 @@ namespace JPSoft.Collections.Tests
 				new Dummy()
 			};
 
-			dic.AddRange(items);
+			hashList.AddRange(items);
 
-			Assert.Throws<ArgumentOutOfRangeException>(() => dic.RemoveRange(0, count));
+			Assert.Throws<ArgumentOutOfRangeException>(() => hashList.RemoveRange(0, count));
 		}
 
 		[Test]
@@ -493,22 +497,22 @@ namespace JPSoft.Collections.Tests
 		{
 			var dummy = new Dummy();
 
-			dic.Add(dummy);
+			hashList.Add(dummy);
 
-			Assert.AreEqual(dummy, dic[0]);
+			Assert.AreEqual(dummy, hashList[0]);
 		}
 
 
 		[Test]
 		[TestCase(-1)]
 		[TestCase(2)]
-		public void IndexGet_Invalid_ThrowsKeyNotFoundException(int index)
+		public void IndexGet_Invalid_ArgumentOutOfRangeException(int index)
 		{
 			var dummy = new Dummy();
 
-			dic.Add(dummy);
+			hashList.Add(dummy);
 
-			Assert.Throws<ArgumentOutOfRangeException>(() => dic[index].ToString());
+			Assert.Throws<ArgumentOutOfRangeException>(() => hashList[index].ToString());
 		}
 
 		[Test]
@@ -516,27 +520,26 @@ namespace JPSoft.Collections.Tests
 		{
 			var dummy = new Dummy();
 
-			dic[0] = dummy;
+			hashList[0] = dummy;
 
-			Assert.AreEqual(dummy, dic.ElementAt(0));
+			Assert.AreEqual(dummy, hashList[0]);
 		}
 
 		[Test]
 		public void IndexSet_Valid_CountReflects()
 		{
 
-			dic[0] = new Dummy();
+			hashList[0] = new Dummy();
 
-			Assert.AreEqual(1, dic.Count);
+			Assert.AreEqual(1, hashList.Count);
 		}
 
 		[Test]
-		public void IndexSet_InvalidIndex_ThrowsKeyNotFoundE()
+		[TestCase(-1)]
+		[TestCase(2)]
+		public void IndexSet_InvalidIndex_ThrowsArgumentOutOfRange(int index)
 		{
-
-			dic[0] = new Dummy();
-
-			Assert.AreEqual(1, dic.Count);
+			Assert.Throws<ArgumentOutOfRangeException>(() => hashList[index] = new Dummy());
 		}
 	}
 }

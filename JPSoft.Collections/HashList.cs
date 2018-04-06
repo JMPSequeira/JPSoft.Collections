@@ -2,251 +2,410 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 
 namespace JPSoft.Collections.Generics
 {
-	public class HashList<T> : IList<T> where T : IComparable<T>
+	public class HashList<T> : IList<T> where T : IEquatable<T>
 	{
-		protected readonly Dictionary<T, int> _indexes = new Dictionary<T, int>();
+		struct Entry
+		{
+			public int Hash { get; set; }
 
-		protected readonly Dictionary<int, T> _items = new Dictionary<int, T>();
+			public int Next { get; set; }
 
-		protected int InnerCount;
+			public int Index { get; set; }
+		}
 
-		public int Count => InnerCount;
+		T[] _items;
 
-		public virtual bool IsReadOnly => false;
+		Entry[] _entries;
 
-		public virtual T this[int index]
+		int[] _buckets;
+
+		int _count;
+
+		int _freeCount;
+
+		int _freeEntry;
+
+		int _length;
+
+		public HashList()
+			=> Init(2);
+
+		public HashList(IEnumerable<T> items)
+		{
+			Init(items.Count());
+
+			InsertRange(0, items);
+		}
+
+		public HashList(int capacity)
+		{
+			if (capacity < 0)
+				throw new ArgumentException("Capacity cannot be negative");
+
+			Init(capacity);
+		}
+
+		void Init(int capacity)
+		{
+			_length = capacity;
+
+			_freeEntry = -1;
+
+			_entries = new Entry[_length];
+
+			_buckets = new int[_length];
+
+			for (var i = 0; i < _length; i++)
+				_buckets[i] = -1;
+
+			_items = new T[_length];
+		}
+
+		public bool IsReadOnly => false;
+
+		public int Count => _count;
+
+		public T this[int index]
 		{
 			get
 			{
-				ThrowOnInvalid(index);
+				if (index > -1 && index < _count)
+					return _items[index];
 
-				return _items[index];
+				throw new ArgumentOutOfRangeException("index");
 			}
-
-			set
-			{
-				if (index < 0 && index > InnerCount)
-					throw new ArgumentOutOfRangeException();
-
-				ThrowOnInvalid(value);
-
-				Include(index, value);
-
-			}
+			set => Include(value, index, false);
 		}
+
+		public void Add(T item) =>
+			Include(item, _count, true);
+
+		public void AddRange(IEnumerable<T> items)
+			=> InsertRange(_count, items);
 
 		public void Clear()
 		{
-			_items.Clear();
-			_indexes.Clear();
+			if (_count > 0)
+			{
+				Array.Clear(_buckets, 0, _length);
+				Array.Clear(_entries, 0, _length);
+				Array.Clear(_items, 0, _count);
+
+				_freeEntry = -1;
+
+				_count = _freeCount = 0;
+			}
 		}
 
-		public bool Contains(T item) => _indexes.ContainsKey(item);
+		public bool Contains(T item)
+			=> item != null && FindEntry(item) >= 0;
 
 		public void CopyTo(T[] array, int arrayIndex)
-		{
-			if (array is null)
-				throw new ArgumentNullException();
-
-			if (array.Rank > 1)
-				throw new ArgumentException("Only one-dimensional array is supported.");
-
-			if (arrayIndex < 0)
-				throw new ArgumentOutOfRangeException("arrayIndex is less than array lower bound.");
-
-			if (array.Length < arrayIndex + InnerCount)
-				throw new ArgumentException("Target array cannot hold source array, starting at index " + arrayIndex);
-
-			for (var i = 0; i < InnerCount; i++)
-				array[i] = _items[i];
-
-		}
-
-		public void Add(T item)
-		{
-			ThrowOnInvalid(item);
-
-			Include(InnerCount, item);
-		}
-
-		public void AddRange(IEnumerable<T> items) =>
-			Include(InnerCount, items);
+			=> Array.Copy(_items, 0, array, arrayIndex, _count);
 
 		public int IndexOf(T item)
+			=> item == null ? -1 : FindIndex(item);
+
+		public void Insert(int index, T item)
+			=> Include(item, index, true);
+
+		public void InsertRange(int index, IEnumerable<T> items)
 		{
-			if (_indexes.TryGetValue(item, out var index))
-				return index;
+			if (items == null)
+				throw new ArgumentNullException("items");
+
+			var hashSet = new HashSet<T>();
+
+			foreach (var item in items)
+			{
+				if (item == null)
+					throw new ArgumentNullException("item");
+
+				if (FindEntry(item) > -1)
+					throw new DuplicateEntryException($"HashList already contains item {_items[FindIndex(item)]}", "item");
+
+				if (!hashSet.Add(item))
+					throw new DuplicateEntryException($"IEnumerable {items} contains at least one duplicate: {item}", "item");
+			}
+
+			var itemCount = hashSet.Count;
+
+			if (_count + itemCount > _length)
+			{
+				_length = _count + itemCount;
+				Resize(true);
+			}
+
+			Array.Copy(_items, index, _items, index + itemCount, _count - index);
+
+			var current = index;
+
+			foreach (var item in items)
+			{
+				var hash = item.GetHashCode();
+
+				IncludeEntry(GetFreeEntry(), current, hash, hash & (_length - 1));
+
+				_items[current++] = item;
+
+				_count++;
+			}
+
+		}
+
+		public bool Remove(T item)
+			=> item == null ? false : Remove(item, true);
+
+		public void RemoveAt(int index)
+		{
+			if (index < 0 || index >= _count)
+				throw new ArgumentOutOfRangeException("index");
+
+			Remove(_items[index], true);
+		}
+
+		public void RemoveRange(int startingIndex, int count)
+		{
+			if (startingIndex < 0)
+				throw new ArgumentOutOfRangeException("startingIndex");
+
+			if (count < 0)
+				throw new ArgumentOutOfRangeException("count");
+
+
+			var plusCount = startingIndex + count;
+
+			if (plusCount > _count)
+				throw new ArgumentException($"The provided startingIndex {startingIndex} and count {count} do not represent a valid range");
+
+			for (var i = startingIndex; i < plusCount; i++)
+				Remove(_items[i], false);
+
+			RemoveItem(startingIndex, count);
+
+			_count -= count;
+		}
+
+		public IEnumerator<T> GetEnumerator() => _items.Take(_count).GetEnumerator();
+
+		IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+
+		int FindIndex(T item)
+		{
+			var hash = item.GetHashCode();
+
+			return FindIndex(item, hash, hash & (_length - 1));
+		}
+
+		int FindIndex(T item, int hash, int bucket)
+		{
+			for (var i = _buckets[bucket]; i >= 0; i = _entries[i].Next)
+				if (_entries[i].Hash == hash && _items[_entries[i].Index].Equals(item))
+					return _entries[i].Index;
 
 			return -1;
 		}
 
-		public void Insert(int index, T item)
+		int FindEntry(T item)
 		{
-			ThrowOnInvalid(index);
+			var hash = item.GetHashCode();
 
-			ThrowOnInvalid(item);
+			return FindEntry(item, hash, hash & (_length - 1));
+		}
 
-			var i = InnerCount;
+		int FindEntry(T item, int hash, int bucket)
+		{
+			for (var i = _buckets[bucket]; i >= 0; i = _entries[i].Next)
+				if (_entries[i].Hash == hash && _items[_entries[i].Index].Equals(item))
+					return i;
 
-			for (; i > index; i--)
+			return -1;
+		}
+
+		int GetFreeEntry()
+		{
+			if (_freeCount == 0)
+				return _count;
+
+			var entry = _freeEntry;
+
+			_freeEntry = _entries[entry].Next;
+
+			_freeCount--;
+
+			return entry;
+		}
+
+		void Include(T item, int index, bool add)
+		{
+			if (item == null)
+				throw new ArgumentNullException("item");
+
+			if (index < 0 || index > _count)
+				throw new ArgumentOutOfRangeException("index");
+
+			var hash = item.GetHashCode();
+
+			var bucket = hash & (_length - 1);
+
+			var existingIndex = FindIndex(item, hash, bucket);
+
+			if (existingIndex >= 0)
 			{
-				var value = _items[i - 1];
-
-				_indexes[value]++;
-
-				_items[i] = value;
+				if (add || existingIndex != index)
+					throw new DuplicateEntryException($"HashList already contains item {_items[existingIndex]}", "item");
 			}
 
-			Include(index, item);
-		}
+			var entry = GetFreeEntry();
 
-		public void InsertRange(int index, IEnumerable<T> items)
-		{
-			ThrowOnInvalid(index);
-
-			Include(index, items);
-		}
-
-		public bool Remove(T item)
-		{
-			if (_indexes.TryGetValue(item, out var index))
+			if (add)
 			{
-				var threshold = InnerCount - 1;
-
-				for (; index < threshold; index++)
+				if (_count == _length)
 				{
-					var value = _items[index + 1];
-
-					_items[index] = value;
-
-					_indexes[value]--;
+					Resize();
+					bucket = hash & (_length - 1);
 				}
 
-				Exclude(index, item);
+				IncludeItem(item, index);
 
-				return true;
+				_count++;
+			}
+			else
+			{
+				if (existingIndex > -1)
+					Remove(_items[existingIndex], false);
+
+				_items[index] = item;
+
+				if (index == _count)
+					_count++;
+			}
+
+			IncludeEntry(entry, index, hash, bucket);
+
+		}
+
+		void IncludeEntry(int entry, int index, int hash, int bucket)
+		{
+			_entries[entry].Hash = hash;
+			_entries[entry].Index = index;
+			_entries[entry].Next = _buckets[bucket];
+
+			_buckets[bucket] = entry;
+		}
+
+		void IncludeItem(T item, int index)
+		{
+			if (index != _count)
+				Array.Copy(_items, index, _items, index + 1, _count - index);
+
+			_items[index] = item;
+		}
+
+		int NextPowerOfTwo(int value)
+		{
+			value--;
+
+			value |= value >> 1;
+			value |= value >> 2;
+			value |= value >> 4;
+			value |= value >> 8;
+			value |= value >> 16;
+
+			return ++value;
+		}
+
+		bool Remove(T item, bool removeItem)
+		{
+			var hash = item.GetHashCode();
+
+			var bucket = hash & (_length - 1);
+
+			var last = -1;
+
+			for (var i = _buckets[bucket]; i >= 0; i = _entries[i].Next, last = i)
+			{
+				if (hash == _entries[i].Hash && item.Equals(_items[_entries[i].Index]))
+				{
+					if (last > 0)
+						_entries[last].Next = _entries[i].Next;
+					else
+						_buckets[bucket] = _entries[i].Next;
+
+
+					_entries[i].Hash = 0;
+
+					_entries[i].Index = 0;
+
+					_entries[i].Next = _freeEntry;
+
+					_freeCount++;
+
+					_freeEntry = i;
+
+					if (removeItem)
+					{
+						RemoveItem(_entries[i].Index, 1);
+						_count--;
+					}
+
+					return true;
+				}
 			}
 
 			return false;
 		}
 
-		public void RemoveAt(int index)
+		void RemoveItem(int startingIndex, int itemCount)
 		{
-			ThrowOnInvalid(index);
+			var plusCount = startingIndex + itemCount;
 
-			Remove(_items[index]);
+			Array.Copy(_items, plusCount, _items, startingIndex, _count - plusCount);
 		}
 
-		public void RemoveRange(int index, int count)
+		void Resize(bool asPowerOfTwo = false)
 		{
-			ThrowOnInvalid(index);
+			if (asPowerOfTwo)
+				_length = NextPowerOfTwo(_length);
+			else
+				_length = _length * 2;
 
-			if (count < 0)
-				throw new ArgumentOutOfRangeException();
+			var newBuckets = new int[_length];
 
-			var lastIndex = index + count;
+			var newEntries = new Entry[_length];
 
-			if (lastIndex > InnerCount)
-				throw new ArgumentException();
+			var newItems = new T[_length];
 
-			for (; index < lastIndex; index++)
+			Array.Copy(_entries, newEntries, _count);
+
+			for (var i = 0; i < _length; i++)
+				newBuckets[i] = -1;
+
+			for (var i = 0; i < _count; i++)
 			{
-				var item = _items[index];
+				if (newEntries[i].Hash >= 0)
+				{
+					var bucket = newEntries[i].Hash & (_length - 1);
 
-				_items.Remove(index);
+					newEntries[i].Next = newBuckets[bucket];
 
-				_indexes.Remove(item);
+					newBuckets[bucket] = i;
+				}
 			}
 
-			for (; lastIndex < InnerCount; lastIndex++)
-			{
-				var item = _items[lastIndex];
+			Array.Copy(_items, newItems, _count);
 
-				_items.Remove(lastIndex);
-
-				var current = _indexes[item] -= count;
-
-				_items[current] = item;
-			}
-
-			InnerCount -= count;
+			_buckets = newBuckets;
+			_entries = newEntries;
+			_items = newItems;
 		}
+	}
 
-		public IEnumerator<T> GetEnumerator() =>
-		_items.OrderBy(o => o.Key).Select(o => o.Value).GetEnumerator();
-
-		IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
-
-		protected virtual void Include(int index, T item)
-		{
-			_indexes[item] = index;
-
-			_items[index] = item;
-
-			InnerCount++;
-		}
-
-		protected virtual void Include(int index, IEnumerable<T> items)
-		{
-			var count = GetCountOrThrowOnInvalid(items);
-
-			var i = InnerCount - 1;
-
-			var threshold = index - 1;
-
-			for (; i != threshold; i--)
-			{
-				var value = _items[i];
-
-				_indexes[value] += count;
-
-				_items[i + count] = value;
-			}
-
-			foreach (var item in items)
-				Include(index++, item);
-		}
-
-		protected virtual void Exclude(int index, T item)
-		{
-			_indexes.Remove(item);
-
-			_items.Remove(index);
-
-			InnerCount--;
-		}
-
-		protected virtual int GetCountOrThrowOnInvalid(IEnumerable<T> items)
-		{
-			var count = 0;
-
-			foreach (var item in items)
-			{
-				ThrowOnInvalid(item);
-
-				count++;
-			}
-
-			return count;
-		}
-
-		protected virtual void ThrowOnInvalid(T item)
-		{
-			if (item == null)
-				throw new ArgumentNullException();
-
-			if (_indexes.ContainsKey(item))
-				throw new ArgumentException();
-		}
-
-		protected virtual void ThrowOnInvalid(int index)
-		{
-			if (index < 0 || index >= InnerCount)
-				throw new ArgumentOutOfRangeException();
-		}
+	public class DuplicateEntryException : ArgumentException
+	{
+		public DuplicateEntryException(string message, string paramName) : base(message, paramName) { }
 	}
 }
