@@ -9,7 +9,7 @@ namespace JPSoft.Collections.Generics
 	/// A collection accepting no nulls or duplicates.
 	/// </summary>
 	/// <typeparam name="T"></typeparam>
-	public class HashList<T> : IList<T> where T : IEquatable<T>
+	public class HashList<T> : IList<T>
 	{
 		struct Entry
 		{
@@ -20,12 +20,6 @@ namespace JPSoft.Collections.Generics
 			public int Index { get; set; }
 		}
 
-		T[] _items;
-
-		Entry[] _entries;
-
-		int[] _buckets;
-
 		int _count;
 
 		int _freeCount;
@@ -34,27 +28,43 @@ namespace JPSoft.Collections.Generics
 
 		int _length;
 
-		public HashList()
-			=> Init(2);
+		T[] _items;
 
-		public HashList(IEnumerable<T> items)
-		{
-			Init(items.Count());
+		Entry[] _entries;
 
-			InsertRange(0, items);
-		}
+		int[] _buckets;
 
-		public HashList(int capacity)
+		IEqualityComparer<T> _comparer;
+
+		public HashList() : this(2, EqualityComparer<T>.Default) { }
+
+		public HashList(IEnumerable<T> items, IEqualityComparer<T> comparer) : this(items.Count(), comparer)
+			=> InsertRange(0, items);
+
+		public HashList(IEnumerable<T> items) : this(items, EqualityComparer<T>.Default) { }
+
+		public HashList(int capacity) : this(capacity, EqualityComparer<T>.Default) { }
+
+		public HashList(int capacity, IEqualityComparer<T> comparer)
 		{
 			if (capacity < 0)
-				throw new ArgumentException("Capacity cannot be negative");
+				throw new ArgumentException("Capacity cannot be negative", nameof(capacity));
 
-			Init(capacity);
+			_length = GetNextPowerOfTwo(capacity);
+
+			_freeEntry = -1;
+
+			_entries = new Entry[_length];
+
+			_buckets = new int[_length];
+
+			for (var i = 0; i < _length; i++)
+				_buckets[i] = -1;
+
+			_items = new T[_length];
+
+			_comparer = comparer ?? EqualityComparer<T>.Default;
 		}
-
-		public bool IsReadOnly => false;
-
-		public int Count => _count;
 
 		public T this[int index]
 		{
@@ -63,10 +73,16 @@ namespace JPSoft.Collections.Generics
 				if (index > -1 && index < _count)
 					return _items[index];
 
-				throw new ArgumentOutOfRangeException("index");
+				throw new ArgumentOutOfRangeException(nameof(index));
 			}
 			set => Include(value, index, false);
 		}
+
+		public IEqualityComparer<T> Comparer => _comparer;
+
+		public int Count => _count;
+
+		public bool IsReadOnly => false;
 
 		public void Add(T item) =>
 			Include(item, _count, true);
@@ -103,23 +119,37 @@ namespace JPSoft.Collections.Generics
 		public void InsertRange(int index, IEnumerable<T> items)
 		{
 			if (items == null)
-				throw new ArgumentNullException("items");
+				throw new ArgumentNullException(nameof(items));
 
-			var hashSet = new HashSet<T>();
+			var itemCount = 0;
+
+			if (items is ICollection collection)
+				itemCount = collection.Count;
+			else
+				itemCount = items.Count();
+
+			var helper = new HashList<T>(itemCount, _comparer);
 
 			foreach (var item in items)
 			{
-				if (item == null)
-					throw new ArgumentNullException("item");
+				try
+				{
+					helper.Add(item);
+				}
+				catch (DuplicateEntryException)
+				{
+					throw new ArgumentException("Inserted collection contained at least one duplicate entry.", nameof(items));
+				}
+				catch (ArgumentNullException)
+				{
+					throw new ArgumentException("Inserted collection contained at least one null item.", nameof(items));
+				}
+
 
 				if (FindEntry(item) > -1)
-					throw new DuplicateEntryException($"HashList already contains item {_items[FindIndex(item)]}", "item");
-
-				if (!hashSet.Add(item))
-					throw new DuplicateEntryException($"IEnumerable {items} contains at least one duplicate: {item}", "item");
+					throw new DuplicateEntryException("Coolections contains items that already exist.", nameof(items));
 			}
 
-			var itemCount = hashSet.Count;
 
 			if (_count + itemCount > _length)
 			{
@@ -129,19 +159,20 @@ namespace JPSoft.Collections.Generics
 
 			Array.Copy(_items, index, _items, index + itemCount, _count - index);
 
-			var current = index;
-
-			foreach (var item in items)
+			for (var i = 0; i < itemCount; i++)
 			{
-				var hash = item.GetHashCode();
+				var current = helper._entries[i];
 
-				IncludeEntry(GetFreeEntry(), current, hash, hash & (_length - 1));
+				var hash = current.Hash;
 
-				_items[current++] = item;
+				var targetIndex = current.Index + index;
+
+				IncludeEntry(GetFreeEntry(), targetIndex, hash, hash & (_length - 1));
+
+				_items[targetIndex] = helper._items[current.Index];
 
 				_count++;
 			}
-
 		}
 
 		public bool Remove(T item)
@@ -150,7 +181,7 @@ namespace JPSoft.Collections.Generics
 		public void RemoveAt(int index)
 		{
 			if (index < 0 || index >= _count)
-				throw new ArgumentOutOfRangeException("index");
+				throw new ArgumentOutOfRangeException(nameof(index));
 
 			Remove(_items[index], true);
 		}
@@ -158,10 +189,10 @@ namespace JPSoft.Collections.Generics
 		public void RemoveRange(int startingIndex, int count)
 		{
 			if (startingIndex < 0)
-				throw new ArgumentOutOfRangeException("startingIndex");
+				throw new ArgumentOutOfRangeException(nameof(startingIndex));
 
 			if (count < 0)
-				throw new ArgumentOutOfRangeException("count");
+				throw new ArgumentOutOfRangeException(nameof(count));
 
 
 			var plusCount = startingIndex + count;
@@ -177,13 +208,17 @@ namespace JPSoft.Collections.Generics
 			_count -= count;
 		}
 
-		public IEnumerator<T> GetEnumerator() => _items.Take(_count).GetEnumerator();
+		public IEnumerator<T> GetEnumerator()
+		{
+			for (var i = 0; i < _count; i++)
+				yield return _items[i];
+		}
 
 		IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
 		int FindIndex(T item)
 		{
-			var hash = item.GetHashCode();
+			var hash = _comparer.GetHashCode(item);
 
 			return FindIndex(item, hash, hash & (_length - 1));
 		}
@@ -191,7 +226,7 @@ namespace JPSoft.Collections.Generics
 		int FindIndex(T item, int hash, int bucket)
 		{
 			for (var i = _buckets[bucket]; i >= 0; i = _entries[i].Next)
-				if (_entries[i].Hash == hash && _items[_entries[i].Index].Equals(item))
+				if (_entries[i].Hash == hash && _comparer.Equals(item, _items[_entries[i].Index]))
 					return _entries[i].Index;
 
 			return -1;
@@ -199,7 +234,7 @@ namespace JPSoft.Collections.Generics
 
 		int FindEntry(T item)
 		{
-			var hash = item.GetHashCode();
+			var hash = _comparer.GetHashCode(item);
 
 			return FindEntry(item, hash, hash & (_length - 1));
 		}
@@ -207,7 +242,7 @@ namespace JPSoft.Collections.Generics
 		int FindEntry(T item, int hash, int bucket)
 		{
 			for (var i = _buckets[bucket]; i >= 0; i = _entries[i].Next)
-				if (_entries[i].Hash == hash && _items[_entries[i].Index].Equals(item))
+				if (_entries[i].Hash == hash && _comparer.Equals(item, _items[_entries[i].Index]))
 					return i;
 
 			return -1;
@@ -230,12 +265,12 @@ namespace JPSoft.Collections.Generics
 		void Include(T item, int index, bool add)
 		{
 			if (item == null)
-				throw new ArgumentNullException("item");
+				throw new ArgumentNullException(nameof(item));
 
 			if (index < 0 || index > _count)
-				throw new ArgumentOutOfRangeException("index");
+				throw new ArgumentOutOfRangeException(nameof(index));
 
-			var hash = item.GetHashCode();
+			var hash = _comparer.GetHashCode(item);
 
 			var bucket = hash & (_length - 1);
 
@@ -244,7 +279,7 @@ namespace JPSoft.Collections.Generics
 			if (existingIndex >= 0)
 			{
 				if (add || existingIndex != index)
-					throw new DuplicateEntryException($"HashList already contains item {_items[existingIndex]}", "item");
+					throw new DuplicateEntryException($"HashList already contains item {_items[existingIndex]}", nameof(item));
 			}
 
 			var entry = GetFreeEntry();
@@ -293,23 +328,7 @@ namespace JPSoft.Collections.Generics
 			_items[index] = item;
 		}
 
-		void Init(int capacity)
-		{
-			_length = capacity;
-
-			_freeEntry = -1;
-
-			_entries = new Entry[_length];
-
-			_buckets = new int[_length];
-
-			for (var i = 0; i < _length; i++)
-				_buckets[i] = -1;
-
-			_items = new T[_length];
-		}
-
-		int NextPowerOfTwo(int value)
+		int GetNextPowerOfTwo(int value)
 		{
 			value--;
 
@@ -324,7 +343,7 @@ namespace JPSoft.Collections.Generics
 
 		bool Remove(T item, bool removeItem)
 		{
-			var hash = item.GetHashCode();
+			var hash = _comparer.GetHashCode(item);
 
 			var bucket = hash & (_length - 1);
 
@@ -332,13 +351,12 @@ namespace JPSoft.Collections.Generics
 
 			for (var i = _buckets[bucket]; i >= 0; i = _entries[i].Next, last = i)
 			{
-				if (hash == _entries[i].Hash && item.Equals(_items[_entries[i].Index]))
+				if (hash == _entries[i].Hash && Comparer.Equals(item, _items[_entries[i].Index]))
 				{
 					if (last > 0)
 						_entries[last].Next = _entries[i].Next;
 					else
 						_buckets[bucket] = _entries[i].Next;
-
 
 					_entries[i].Hash = 0;
 
@@ -373,7 +391,7 @@ namespace JPSoft.Collections.Generics
 		void Resize(bool asPowerOfTwo = false)
 		{
 			if (asPowerOfTwo)
-				_length = NextPowerOfTwo(_length);
+				_length = GetNextPowerOfTwo(_length);
 			else
 				_length = _length * 2;
 

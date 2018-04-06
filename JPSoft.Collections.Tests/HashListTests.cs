@@ -49,7 +49,7 @@ namespace JPSoft.Collections.Tests
 		}
 
 		[Test]
-		public void Add_Existing_ThrowsArgumentException()
+		public void Add_Existing_ThrowsDuplicateEntryException()
 		{
 			var same = new Dummy();
 
@@ -96,7 +96,7 @@ namespace JPSoft.Collections.Tests
 		}
 
 		[Test]
-		public void AddRange_CollectionWithNull_ThrowsArgumentNullException()
+		public void AddRange_CollectionWithNull_ThrowsArgumentException()
 		{
 			var items = new List<Dummy>
 			{
@@ -105,11 +105,11 @@ namespace JPSoft.Collections.Tests
 				null
 			};
 
-			Assert.Throws<ArgumentNullException>(() => hashList.AddRange(items));
+			Assert.Throws<ArgumentException>(() => hashList.AddRange(items));
 		}
 
 		[Test]
-		public void AddRange_CollectionWithExisting_ThrowsArgumentException()
+		public void AddRange_CollectionWithExisting_ThrowsDuplicateEntryException()
 		{
 			var same = new Dummy();
 
@@ -193,7 +193,7 @@ namespace JPSoft.Collections.Tests
 		}
 
 		[Test]
-		public void Insert_Existing_ThrowsArgumentException()
+		public void Insert_Existing_ThrowsDuplicateEntryException()
 		{
 			var dummy = new Dummy();
 
@@ -246,7 +246,7 @@ namespace JPSoft.Collections.Tests
 		}
 
 		[Test]
-		public void InsertRange_CollectionWithNull_ThrowsArgumentNullException()
+		public void InsertRange_CollectionWithNull_ThrowsArgumentException()
 		{
 			hashList.Add(new Dummy());
 
@@ -257,11 +257,11 @@ namespace JPSoft.Collections.Tests
 				null
 			};
 
-			Assert.Throws<ArgumentNullException>(() => hashList.InsertRange(0, items));
+			Assert.Throws<ArgumentException>(() => hashList.InsertRange(0, items));
 		}
 
 		[Test]
-		public void InsertRange_CollectionWithExisting_ThrowsArgumentException()
+		public void InsertRange_CollectionWithExisting_ThrowsDuplicateEntryException()
 		{
 			var same = new Dummy();
 			hashList.Add(same);
