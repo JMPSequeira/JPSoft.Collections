@@ -363,9 +363,9 @@ namespace JPSoft.Collections.Generics
 			return false;
 		}
 
-		void RemoveItem(int startingIndex, int itemCount)
+		void RemoveItem(int startingIndex, int count)
 		{
-			var plusCount = startingIndex + itemCount;
+			var plusCount = startingIndex + count;
 
 			Array.Copy(_items, plusCount, _items, startingIndex, _count - plusCount);
 		}
