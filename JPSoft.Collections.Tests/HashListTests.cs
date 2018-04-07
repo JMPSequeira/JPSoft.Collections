@@ -1,24 +1,20 @@
-﻿using System;
+﻿using JPSoft.Collections.Generics;
+using NUnit.Framework;
+using System;
 using System.Collections.Generic;
 using System.Linq;
-using JPSoft.Collections.Generics;
-using NUnit.Framework;
 
 namespace JPSoft.Collections.Tests
 {
 	public class HashListTests
 	{
-
 		public class Dummy : IComparable<Dummy>, IEquatable<Dummy>
 		{
-			static int count = 0;
+			static int count;
 
 			readonly int index = count++;
 
-			public int CompareTo(Dummy other)
-			{
-				return index.CompareTo(other.index);
-			}
+			public int CompareTo(Dummy other) => index.CompareTo(other.index);
 
 			public bool Equals(Dummy other) => index == other.index;
 		}
@@ -26,10 +22,7 @@ namespace JPSoft.Collections.Tests
 		HashList<Dummy> hashList;
 
 		[SetUp]
-		public void Setup()
-		{
-			hashList = new HashList<Dummy>();
-		}
+		public void Setup() => hashList = new HashList<Dummy>();
 
 		[Test]
 		public void Add_Valid_Adds()
@@ -339,10 +332,7 @@ namespace JPSoft.Collections.Tests
 		}
 
 		[Test]
-		public void Remove_Existing_False()
-		{
-			Assert.IsFalse(hashList.Remove(new Dummy()));
-		}
+		public void Remove_Existing_False() => Assert.IsFalse(hashList.Remove(new Dummy()));
 
 		[Test]
 		[TestCase(0)]
@@ -465,7 +455,6 @@ namespace JPSoft.Collections.Tests
 		[TestCase(1, -1)]
 		public void RemoveRange_NegativeIndex_ThrowsArgumentOutOfRangeException(int index, int count)
 		{
-
 			var items = new List<Dummy>
 			{
 				new Dummy(),
@@ -503,7 +492,6 @@ namespace JPSoft.Collections.Tests
 			Assert.AreEqual(dummy, hashList[0]);
 		}
 
-
 		[Test]
 		[TestCase(-1)]
 		[TestCase(2)]
@@ -529,7 +517,6 @@ namespace JPSoft.Collections.Tests
 		[Test]
 		public void IndexSet_Valid_CountReflects()
 		{
-
 			hashList[0] = new Dummy();
 
 			Assert.AreEqual(1, hashList.Count);
