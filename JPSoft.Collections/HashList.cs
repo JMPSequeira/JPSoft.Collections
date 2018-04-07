@@ -291,7 +291,10 @@ namespace JPSoft.Collections.Generics
 					bucket = hash & (_length - 1);
 				}
 
-				IncludeItem(item, index, copy);
+				if (index != _count && copy)
+					Array.Copy(_items, index, _items, index + 1, _count - index);
+
+				_items[index] = item;
 
 				_count++;
 			}
@@ -306,25 +309,12 @@ namespace JPSoft.Collections.Generics
 					_count++;
 			}
 
-			IncludeEntry(entry, index, hash, bucket);
-
-		}
-
-		void IncludeEntry(int entry, int index, int hash, int bucket)
-		{
 			_entries[entry].Hash = hash;
 			_entries[entry].Index = index;
 			_entries[entry].Next = _buckets[bucket];
 
 			_buckets[bucket] = entry;
-		}
 
-		void IncludeItem(T item, int index, bool copy)
-		{
-			if (index != _count && copy)
-				Array.Copy(_items, index, _items, index + 1, _count - index);
-
-			_items[index] = item;
 		}
 
 		int GetNextPowerOfTwo(int value)
