@@ -121,62 +121,63 @@ namespace JPSoft.Collections.Generics
 			if (items == null)
 				throw new ArgumentNullException(nameof(items));
 
-			var itemCount = 0;
+			if (index < 0 || index > _count)
+				throw new ArgumentOutOfRangeException(nameof(index));
 
-			if (items is ICollection collection)
-				itemCount = collection.Count;
+			var backup = MemberwiseClone();
+
+			var count = 0;
+
+			if (items is ICollection<T> collection)
+				count = collection.Count;
 			else
-				itemCount = items.Count();
+				count = items.Count();
 
-			var helper = new HashList<T>(itemCount, _comparer);
-
-			foreach (var item in items)
+			if (count + _count > _length)
 			{
-				try
-				{
-					helper.Add(item);
-				}
-				catch (DuplicateEntryException)
-				{
-					throw new ArgumentException("Inserted collection contained at least one duplicate entry.", nameof(items));
-				}
-				catch (ArgumentNullException)
-				{
-					throw new ArgumentException("Inserted collection contained at least one null item.", nameof(items));
-				}
+				_length = count + _count;
 
+				Resize(true, count, index);
+			}
 
-				if (FindEntry(item) > -1)
+			try
+			{
+				foreach (var item in items)
+					Include(item, index++, true, false);
+			}
+			catch (ArgumentNullException)
+			{
+				Rollback();
+
+				throw new ArgumentException("Inserted collection contained at least one null item.");
+			}
+			catch (DuplicateEntryException)
+			{
+				Rollback();
+
+				if (items.Distinct().Count() == items.Count())
 					throw new DuplicateEntryException("Collection contains at least one item that already exist.", nameof(items));
+
+				throw new DuplicateEntryException("Collection contains at least one duplicate.", nameof(items));
 			}
 
-
-			if (_count + itemCount > _length)
+			void Rollback()
 			{
-				_length = _count + itemCount;
-				Resize(true);
-			}
+				var restored = backup as HashList<T>;
 
-			Array.Copy(_items, index, _items, index + itemCount, _count - index);
-
-			for (var i = 0; i < itemCount; i++)
-			{
-				var current = helper._entries[i];
-
-				var hash = current.Hash;
-
-				var targetIndex = current.Index + index;
-
-				IncludeEntry(GetFreeEntry(), targetIndex, hash, hash & (_length - 1));
-
-				_items[targetIndex] = helper._items[current.Index];
-
-				_count++;
+				_count = restored._count;
+				_freeCount = restored._freeCount;
+				_freeEntry = restored._freeEntry;
+				_length = restored._length;
+				_items = restored._items;
+				_buckets = restored._buckets;
+				_entries = restored._entries;
+				_comparer = restored._comparer;
 			}
 		}
 
 		public bool Remove(T item)
-			=> item == null ? false : Remove(item, true);
+		=> item == null ? false : Remove(item, true);
 
 		public void RemoveAt(int index)
 		{
@@ -262,7 +263,7 @@ namespace JPSoft.Collections.Generics
 			return entry;
 		}
 
-		void Include(T item, int index, bool add)
+		void Include(T item, int index, bool add, bool copy = true)
 		{
 			if (item == null)
 				throw new ArgumentNullException(nameof(item));
@@ -277,10 +278,8 @@ namespace JPSoft.Collections.Generics
 			var existingIndex = FindIndex(item, hash, bucket);
 
 			if (existingIndex >= 0)
-			{
 				if (add || existingIndex != index)
 					throw new DuplicateEntryException($"HashList already contains item {_items[existingIndex]}", nameof(item));
-			}
 
 			var entry = GetFreeEntry();
 
@@ -292,7 +291,7 @@ namespace JPSoft.Collections.Generics
 					bucket = hash & (_length - 1);
 				}
 
-				IncludeItem(item, index);
+				IncludeItem(item, index, copy);
 
 				_count++;
 			}
@@ -320,9 +319,9 @@ namespace JPSoft.Collections.Generics
 			_buckets[bucket] = entry;
 		}
 
-		void IncludeItem(T item, int index)
+		void IncludeItem(T item, int index, bool copy)
 		{
-			if (index != _count)
+			if (index != _count && copy)
 				Array.Copy(_items, index, _items, index + 1, _count - index);
 
 			_items[index] = item;
@@ -388,7 +387,7 @@ namespace JPSoft.Collections.Generics
 			Array.Copy(_items, plusCount, _items, startingIndex, _count - plusCount);
 		}
 
-		void Resize(bool asPowerOfTwo = false)
+		void Resize(bool asPowerOfTwo = false, int offset = 0, int startingIndex = 0)
 		{
 			if (asPowerOfTwo)
 				_length = GetNextPowerOfTwo(_length);
@@ -403,22 +402,47 @@ namespace JPSoft.Collections.Generics
 
 			Array.Copy(_entries, newEntries, _count);
 
-			for (var i = 0; i < _length; i++)
+			for (var i = 0; i < newBuckets.Length; i++)
 				newBuckets[i] = -1;
 
-			for (var i = 0; i < _count; i++)
+			if (offset > 0)
 			{
-				if (newEntries[i].Hash >= 0)
+				for (var i = 0; i < _count; i++)
 				{
-					var bucket = newEntries[i].Hash & (_length - 1);
+					if (newEntries[i].Hash >= 0)
+					{
+						var bucket = newEntries[i].Hash & (_length - 1);
 
-					newEntries[i].Next = newBuckets[bucket];
+						newEntries[i].Next = newBuckets[bucket];
 
-					newBuckets[bucket] = i;
+						if (newEntries[i].Index >= startingIndex)
+							newEntries[i].Index += offset;
+
+						newBuckets[bucket] = i;
+					}
 				}
-			}
 
-			Array.Copy(_items, newItems, _count);
+				if (startingIndex > 0)
+					Array.Copy(_items, newItems, startingIndex);
+
+				Array.Copy(_items, startingIndex, newItems, startingIndex + offset, _count - startingIndex);
+			}
+			else
+			{
+				for (var i = 0; i < _count; i++)
+				{
+					if (newEntries[i].Hash >= 0)
+					{
+						var bucket = newEntries[i].Hash & (_length - 1);
+
+						newEntries[i].Next = newBuckets[bucket];
+
+						newBuckets[bucket] = i;
+					}
+				}
+
+				Array.Copy(_items, newItems, _count);
+			}
 
 			_buckets = newBuckets;
 			_entries = newEntries;

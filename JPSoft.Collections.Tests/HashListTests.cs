@@ -264,6 +264,7 @@ namespace JPSoft.Collections.Tests
 		public void InsertRange_CollectionWithExisting_ThrowsDuplicateEntryException()
 		{
 			var same = new Dummy();
+
 			hashList.Add(same);
 
 			var items = new List<Dummy>
