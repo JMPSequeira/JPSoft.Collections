@@ -38,14 +38,17 @@ namespace JPSoft.Collections.Generics
 
 		public HashList() : this(2, EqualityComparer<T>.Default) { }
 
-		public HashList(IEnumerable<T> items, IEqualityComparer<T> comparer) : this(items.Count(), comparer)
-			=> InsertRange(0, items);
+		public HashList(IEnumerable<T> items, IEqualityComparer<T> comparer)
+			: this(NullCheck(items).Count(), comparer) =>
+				IncludeRange(0, items);
 
-		public HashList(IEnumerable<T> items) : this(items, EqualityComparer<T>.Default) { }
+		public HashList(IEnumerable<T> items)
+			: this(items, EqualityComparer<T>.Default) { }
 
-		public HashList(int capacity) : this(capacity, EqualityComparer<T>.Default) { }
+		public HashList(int capacity)
+			: this(capacity, EqualityComparer<T>.Default) { }
 
-		public HashList(int capacity, IEqualityComparer<T> comparer)
+		public HashList(int capacity, IEqualityComparer<T> comparer = null)
 		{
 			if (capacity < 0)
 				throw new ArgumentException("Capacity cannot be negative", nameof(capacity));
@@ -68,14 +71,9 @@ namespace JPSoft.Collections.Generics
 
 		public T this[int index]
 		{
-			get
-			{
-				if (index > -1 && index < _count)
-					return _items[index];
+			get => _items[BoundCheck(index)];
 
-				throw new ArgumentOutOfRangeException(nameof(index));
-			}
-			set => Include(value, index, false);
+			set => Include(NullCheck(value), BoundCheck(index), false);
 		}
 
 		public IEqualityComparer<T> Comparer => _comparer;
@@ -85,10 +83,10 @@ namespace JPSoft.Collections.Generics
 		public bool IsReadOnly => false;
 
 		public void Add(T item) =>
-			Include(item, _count, true);
+			Include(NullCheck(item), _count, true);
 
-		public void AddRange(IEnumerable<T> items)
-			=> InsertRange(_count, items);
+		public void AddRange(IEnumerable<T> items) =>
+			InsertRange(_count, NullCheck(items));
 
 		public void Clear()
 		{
@@ -104,88 +102,26 @@ namespace JPSoft.Collections.Generics
 			}
 		}
 
-		public bool Contains(T item)
-			=> item != null && FindEntry(item) >= 0;
+		public bool Contains(T item) =>
+			item != null && FindEntry(item) >= 0;
 
-		public void CopyTo(T[] array, int arrayIndex)
-			=> Array.Copy(_items, 0, array, arrayIndex, _count);
+		public void CopyTo(T[] array, int arrayIndex) =>
+			Array.Copy(_items, 0, array, arrayIndex, _count);
 
-		public int IndexOf(T item)
-			=> item == null ? -1 : FindIndex(item);
+		public int IndexOf(T item) =>
+			item == null ? -1 : FindIndex(item);
 
-		public void Insert(int index, T item)
-			=> Include(item, index, true);
+		public void Insert(int index, T item) =>
+			Include(NullCheck(item), BoundCheck(index), true);
 
-		public void InsertRange(int index, IEnumerable<T> items)
-		{
-			if (items == null)
-				throw new ArgumentNullException(nameof(items));
+		public void InsertRange(int index, IEnumerable<T> items) =>
+			IncludeRange(BoundCheck(index), NullCheck(items));
 
-			if (index < 0 || index > _count)
-				throw new ArgumentOutOfRangeException(nameof(index));
+		public bool Remove(T item) =>
+			item == null ? false : Remove(item, true);
 
-			var backup = MemberwiseClone();
-
-			var count = 0;
-
-			if (items is ICollection<T> collection)
-				count = collection.Count;
-			else
-				count = items.Count();
-
-			if (count + _count > _length)
-			{
-				_length = count + _count;
-
-				Resize(true, count, index);
-			}
-
-			try
-			{
-				foreach (var item in items)
-					Include(item, index++, true, false);
-			}
-			catch (ArgumentNullException)
-			{
-				Rollback();
-
-				throw new ArgumentException("Inserted collection contained at least one null item.");
-			}
-			catch (DuplicateEntryException)
-			{
-				Rollback();
-
-				if (items.Distinct().Count() == items.Count())
-					throw new DuplicateEntryException("Collection contains at least one item that already exist.", nameof(items));
-
-				throw new DuplicateEntryException("Collection contains at least one duplicate.", nameof(items));
-			}
-
-			void Rollback()
-			{
-				var restored = backup as HashList<T>;
-
-				_count = restored._count;
-				_freeCount = restored._freeCount;
-				_freeEntry = restored._freeEntry;
-				_length = restored._length;
-				_items = restored._items;
-				_buckets = restored._buckets;
-				_entries = restored._entries;
-				_comparer = restored._comparer;
-			}
-		}
-
-		public bool Remove(T item)
-		=> item == null ? false : Remove(item, true);
-
-		public void RemoveAt(int index)
-		{
-			if (index < 0 || index >= _count)
-				throw new ArgumentOutOfRangeException(nameof(index));
-
-			Remove(_items[index], true);
-		}
+		public void RemoveAt(int index) =>
+			Remove(_items[BoundCheck(index, 1)], true);
 
 		public void RemoveRange(int startingIndex, int count)
 		{
@@ -195,7 +131,6 @@ namespace JPSoft.Collections.Generics
 			if (count < 0)
 				throw new ArgumentOutOfRangeException(nameof(count));
 
-
 			var plusCount = startingIndex + count;
 
 			if (plusCount > _count)
@@ -204,7 +139,7 @@ namespace JPSoft.Collections.Generics
 			for (var i = startingIndex; i < plusCount; i++)
 				Remove(_items[i], false);
 
-			RemoveItem(startingIndex, count);
+			Remove(startingIndex, count);
 
 			_count -= count;
 		}
@@ -216,6 +151,14 @@ namespace JPSoft.Collections.Generics
 		}
 
 		IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+
+		int BoundCheck(int index, int offset = 0)
+		{
+			if (index < 0 || index + offset > _count)
+				throw new ArgumentOutOfRangeException(nameof(index));
+
+			return index;
+		}
 
 		int FindIndex(T item)
 		{
@@ -265,21 +208,20 @@ namespace JPSoft.Collections.Generics
 
 		void Include(T item, int index, bool add, bool copy = true)
 		{
-			if (item == null)
-				throw new ArgumentNullException(nameof(item));
-
-			if (index < 0 || index > _count)
-				throw new ArgumentOutOfRangeException(nameof(index));
-
 			var hash = _comparer.GetHashCode(item);
 
 			var bucket = hash & (_length - 1);
 
-			var existingIndex = FindIndex(item, hash, bucket);
+			var existingIndex = 0;
 
-			if (existingIndex >= 0)
-				if (add || existingIndex != index)
-					throw new DuplicateEntryException($"HashList already contains item {_items[existingIndex]}", nameof(item));
+			if (_buckets[bucket] > -1)
+			{
+				existingIndex = FindIndex(item, hash, bucket);
+
+				if (existingIndex >= 0)
+					if (add || existingIndex != index)
+						throw new DuplicateEntryException($"HashList already contains item {_items[existingIndex]}", nameof(item));
+			}
 
 			var entry = GetFreeEntry();
 
@@ -317,17 +259,58 @@ namespace JPSoft.Collections.Generics
 
 		}
 
-		int GetNextPowerOfTwo(int value)
+		void IncludeRange(int index, IEnumerable<T> items)
 		{
-			value--;
+			var backup = MemberwiseClone();
 
-			value |= value >> 1;
-			value |= value >> 2;
-			value |= value >> 4;
-			value |= value >> 8;
-			value |= value >> 16;
+			var count = 0;
 
-			return ++value;
+			if (items is ICollection<T> collection)
+				count = collection.Count;
+			else
+				count = items.Count();
+
+			if (count + _count > _length)
+			{
+				_length = count + _count;
+
+				Resize(true, count, index);
+			}
+
+			try
+			{
+				foreach (var item in items)
+					Include(NullCheck(item), index++, true, false);
+			}
+			catch (ArgumentNullException)
+			{
+				Rollback();
+
+				throw new ArgumentException("Inserted collection contained at least one null item.");
+			}
+			catch (DuplicateEntryException)
+			{
+				Rollback();
+
+				if (items.Distinct().Count() == items.Count())
+					throw new DuplicateEntryException("Collection contains at least one item that already exist.", nameof(items));
+
+				throw new DuplicateEntryException("Collection contains at least one duplicate.", nameof(items));
+			}
+
+			void Rollback()
+			{
+				var restored = backup as HashList<T>;
+
+				_count = restored._count;
+				_freeCount = restored._freeCount;
+				_freeEntry = restored._freeEntry;
+				_length = restored._length;
+				_items = restored._items;
+				_buckets = restored._buckets;
+				_entries = restored._entries;
+				_comparer = restored._comparer;
+			}
 		}
 
 		bool Remove(T item, bool removeItem)
@@ -359,7 +342,7 @@ namespace JPSoft.Collections.Generics
 
 					if (removeItem)
 					{
-						RemoveItem(_entries[i].Index, 1);
+						Remove(_entries[i].Index, 1);
 						_count--;
 					}
 
@@ -370,7 +353,7 @@ namespace JPSoft.Collections.Generics
 			return false;
 		}
 
-		void RemoveItem(int startingIndex, int count)
+		void Remove(int startingIndex, int count)
 		{
 			var plusCount = startingIndex + count;
 
@@ -437,6 +420,27 @@ namespace JPSoft.Collections.Generics
 			_buckets = newBuckets;
 			_entries = newEntries;
 			_items = newItems;
+		}
+
+		static TRef NullCheck<TRef>(TRef item)
+		{
+			if (item == null)
+				throw new ArgumentNullException($"Argument of type {typeof(TRef).Name} cannot be null.");
+
+			return item;
+		}
+
+		static int GetNextPowerOfTwo(int value)
+		{
+			value--;
+
+			value |= value >> 1;
+			value |= value >> 2;
+			value |= value >> 4;
+			value |= value >> 8;
+			value |= value >> 16;
+
+			return ++value;
 		}
 	}
 }
