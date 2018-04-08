@@ -144,6 +144,12 @@ namespace JPSoft.Collections.Generics
 			_count -= count;
 		}
 
+		public bool TryAdd(T item) =>
+			TryInclude(_count, NullCheck(item));
+
+		public bool TryInsert(int index, T item) =>
+			TryInclude(BoundCheck(index), NullCheck(item));
+
 		public IEnumerator<T> GetEnumerator()
 		{
 			for (var i = 0; i < _count; i++)
@@ -212,16 +218,12 @@ namespace JPSoft.Collections.Generics
 
 			var bucket = hash & (_length - 1);
 
-			var existingIndex = 0;
+			var existingIndex = FindIndex(item, hash, bucket);
 
-			if (_buckets[bucket] > -1)
-			{
-				existingIndex = FindIndex(item, hash, bucket);
+			if (existingIndex >= 0)
+				if (add || existingIndex != index)
+					throw new DuplicateEntryException($"HashList already contains item {_items[existingIndex]}", nameof(item));
 
-				if (existingIndex >= 0)
-					if (add || existingIndex != index)
-						throw new DuplicateEntryException($"HashList already contains item {_items[existingIndex]}", nameof(item));
-			}
 
 			var entry = GetFreeEntry();
 
@@ -256,7 +258,6 @@ namespace JPSoft.Collections.Generics
 			_entries[entry].Next = _buckets[bucket];
 
 			_buckets[bucket] = entry;
-
 		}
 
 		void IncludeRange(int index, IEnumerable<T> items)
@@ -311,6 +312,20 @@ namespace JPSoft.Collections.Generics
 				_entries = restored._entries;
 				_comparer = restored._comparer;
 			}
+		}
+
+		bool TryInclude(int index, T item)
+		{
+			var hash = _comparer.GetHashCode(NullCheck(item));
+
+			var bucket = hash & (_length - 1);
+
+			if (FindEntry(item, hash, bucket) > -1)
+				return false;
+
+			Include(item, _count, true);
+
+			return true;
 		}
 
 		bool Remove(T item, bool removeItem)
