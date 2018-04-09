@@ -39,7 +39,7 @@ namespace JPSoft.Collections.Generics
 		public HashList() : this(2, EqualityComparer<T>.Default) { }
 
 		public HashList(IEnumerable<T> items, IEqualityComparer<T> comparer)
-			: this(NullCheck(items).Count(), comparer) =>
+			: this(NullProtect(items).Count(), comparer) =>
 				IncludeRange(0, items);
 
 		public HashList(IEnumerable<T> items)
@@ -71,9 +71,9 @@ namespace JPSoft.Collections.Generics
 
 		public T this[int index]
 		{
-			get => _items[BoundCheck(index)];
+			get => _items[BoundProtect(index)];
 
-			set => Include(NullCheck(value), BoundCheck(index), false);
+			set => Include(NullProtect(value), BoundProtect(index), false);
 		}
 
 		public IEqualityComparer<T> Comparer => _comparer;
@@ -83,10 +83,10 @@ namespace JPSoft.Collections.Generics
 		public bool IsReadOnly => false;
 
 		public void Add(T item) =>
-			Include(NullCheck(item), _count, true);
+			Include(NullProtect(item), _count, true);
 
 		public void AddRange(IEnumerable<T> items) =>
-			InsertRange(_count, NullCheck(items));
+			InsertRange(_count, NullProtect(items));
 
 		public void Clear()
 		{
@@ -112,16 +112,16 @@ namespace JPSoft.Collections.Generics
 			item == null ? -1 : FindIndex(item);
 
 		public void Insert(int index, T item) =>
-			Include(NullCheck(item), BoundCheck(index), true);
+			Include(NullProtect(item), BoundProtect(index), true);
 
 		public void InsertRange(int index, IEnumerable<T> items) =>
-			IncludeRange(BoundCheck(index), NullCheck(items));
+			IncludeRange(BoundProtect(index), NullProtect(items));
 
 		public bool Remove(T item) =>
 			item == null ? false : Remove(item, true);
 
 		public void RemoveAt(int index) =>
-			Remove(_items[BoundCheck(index, 1)], true);
+			Remove(_items[BoundProtect(index, 1)], true);
 
 		public void RemoveRange(int startingIndex, int count)
 		{
@@ -145,10 +145,10 @@ namespace JPSoft.Collections.Generics
 		}
 
 		public bool TryAdd(T item) =>
-			TryInclude(_count, NullCheck(item));
+			TryInclude(_count, NullProtect(item));
 
 		public bool TryInsert(int index, T item) =>
-			TryInclude(BoundCheck(index), NullCheck(item));
+			TryInclude(BoundProtect(index), NullProtect(item));
 
 		public IEnumerator<T> GetEnumerator()
 		{
@@ -158,7 +158,7 @@ namespace JPSoft.Collections.Generics
 
 		IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
-		int BoundCheck(int index, int offset = 0)
+		int BoundProtect(int index, int offset = 0)
 		{
 			if (index < 0 || index + offset > _count)
 				throw new ArgumentOutOfRangeException(nameof(index));
@@ -281,7 +281,7 @@ namespace JPSoft.Collections.Generics
 			try
 			{
 				foreach (var item in items)
-					Include(NullCheck(item), index++, true, false);
+					Include(NullProtect(item), index++, true, false);
 			}
 			catch (ArgumentNullException)
 			{
@@ -316,7 +316,7 @@ namespace JPSoft.Collections.Generics
 
 		bool TryInclude(int index, T item)
 		{
-			var hash = _comparer.GetHashCode(NullCheck(item));
+			var hash = _comparer.GetHashCode(NullProtect(item));
 
 			var bucket = hash & (_length - 1);
 
@@ -437,7 +437,7 @@ namespace JPSoft.Collections.Generics
 			_items = newItems;
 		}
 
-		static TRef NullCheck<TRef>(TRef item)
+		static TRef NullProtect<TRef>(TRef item)
 		{
 			if (item == null)
 				throw new ArgumentNullException($"Argument of type {typeof(TRef).Name} cannot be null.");
