@@ -150,6 +150,22 @@ namespace JPSoft.Collections.Generics
 		public bool TryInsert(int index, T item) =>
 			TryInclude(BoundProtect(index), NullProtect(item));
 
+		public bool TryGet(T equal, out T original)
+		{
+			var entry = FindEntry(equal);
+
+			if (entry > -1)
+			{
+				original = _items[_entries[entry].Index];
+				return true;
+			}
+			else
+			{
+				original = default;
+				return false;
+			}
+		}
+
 		public IEnumerator<T> GetEnumerator()
 		{
 			for (var i = 0; i < _count; i++)
