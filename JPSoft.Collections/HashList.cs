@@ -152,18 +152,22 @@ namespace JPSoft.Collections.Generics
 
 		public bool TryGet(T equal, out T original)
 		{
-			var entry = FindEntry(equal);
 
-			if (entry > -1)
+			if (equal != null)
 			{
-				original = _items[_entries[entry].Index];
-				return true;
+				var index = FindIndex(equal);
+
+				if (index > -1)
+				{
+					original = _items[index];
+					return true;
+				}
 			}
-			else
-			{
-				original = default;
-				return false;
-			}
+
+			original = default;
+
+			return false;
+
 		}
 
 		public IEnumerator<T> GetEnumerator()
